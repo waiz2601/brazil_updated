@@ -39,6 +39,11 @@ ENV/
 *.model
 *.pkl
 
+# Data files
+*.csv
+*.xlsx
+*.xls
+
 # Logs
 *.log
 
