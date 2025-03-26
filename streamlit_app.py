@@ -1,115 +1,124 @@
 import streamlit as st
-import requests
 import pandas as pd
-from datetime import datetime, timedelta
-import json
+import numpy as np
+import joblib
+from datetime import datetime
+import requests
 
-st.set_page_config(page_title="Olist Sales Prediction", page_icon="📊", layout="wide")
+# Set page config
+st.set_page_config(
+    page_title="Delivery Delay Predictor",
+    page_icon="🚚",
+    layout="wide"
+)
 
-st.title("📊 Olist Sales Prediction")
+# Title and description
+st.title("🚚 Delivery Delay Predictor")
 st.markdown("""
-This application predicts sales performance based on product and delivery features.
+This app predicts whether a delivery will be on time or delayed based on various features.
 Enter the details below to get a prediction.
 """)
 
-# Create two columns for input fields
+# Load the model
+try:
+    model = joblib.load('random_forest_model.joblib')
+except:
+    st.error("Error: Model file not found. Please make sure 'random_forest_model.joblib' exists.")
+    st.stop()
+
+# Create input fields
+st.subheader("Enter Delivery Details")
+
+# Create two columns for better layout
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Product Details")
-    price = st.number_input("Product Price (BRL)", min_value=0.0, value=100.0)
-    freight_value = st.number_input("Freight Value (BRL)", min_value=0.0, value=20.0)
-    product_weight_g = st.number_input("Product Weight (g)", min_value=0.0, value=1000.0)
-    product_length_cm = st.number_input("Product Length (cm)", min_value=0.0, value=20.0)
-    product_height_cm = st.number_input("Product Height (cm)", min_value=0.0, value=10.0)
-    product_width_cm = st.number_input("Product Width (cm)", min_value=0.0, value=10.0)
+    freight_value = st.number_input("Freight Value", min_value=0.0, max_value=1000.0, value=10.0)
+    price_per_weight = st.number_input("Price per Weight", min_value=0.0, max_value=1000.0, value=10.0)
+    
+    # Date input
+    purchase_date = st.date_input("Purchase Date")
+    purchase_year = purchase_date.year
+    purchase_month = purchase_date.month
+    purchase_day = purchase_date.day
+    purchase_quarter = (purchase_month - 1) // 3 + 1
 
+# Display the entered values
 with col2:
-    st.subheader("Delivery Details")
-    order_date = st.date_input("Order Purchase Date", datetime.now())
-    order_time = st.time_input("Order Purchase Time", datetime.now().time())
-    order_purchase_timestamp = datetime.combine(order_date, order_time)
-    
-    # Calculate delivery dates
-    carrier_date = order_purchase_timestamp + timedelta(days=3)
-    customer_date = carrier_date + timedelta(days=5)
-    
-    order_delivered_carrier_date = st.date_input(
-        "Order Delivered to Carrier Date",
-        carrier_date,
-        min_value=order_date
-    )
-    order_delivered_customer_date = st.date_input(
-        "Order Delivered to Customer Date",
-        customer_date,
-        min_value=order_delivered_carrier_date
-    )
+    st.markdown("### Entered Values")
+    st.write(f"Freight Value: {freight_value}")
+    st.write(f"Price per Weight: {price_per_weight}")
+    st.write(f"Purchase Date: {purchase_date}")
+    st.write(f"Purchase Year: {purchase_year}")
+    st.write(f"Purchase Month: {purchase_month}")
+    st.write(f"Purchase Day: {purchase_day}")
+    st.write(f"Purchase Quarter: {purchase_quarter}")
 
 # Create prediction button
-if st.button("Get Prediction"):
-    # Prepare data for API
-    data = {
-        "price": price,
-        "freight_value": freight_value,
-        "product_weight_g": product_weight_g,
-        "product_length_cm": product_length_cm,
-        "product_height_cm": product_height_cm,
-        "product_width_cm": product_width_cm,
-        "order_purchase_timestamp": order_purchase_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-        "order_delivered_carrier_date": order_delivered_carrier_date.strftime("%Y-%m-%d"),
-        "order_delivered_customer_date": order_delivered_customer_date.strftime("%Y-%m-%d")
-    }
-    
+if st.button("Predict Delivery Status"):
     try:
-        # Make API request
-        response = requests.post("http://localhost:5000/predict", json=data)
-        result = response.json()
+        # Prepare input data
+        input_data = pd.DataFrame({
+            'freight_value': [float(freight_value)],
+            'purchase_year': [int(purchase_year)],
+            'purchase_month': [int(purchase_month)],
+            'purchase_day': [int(purchase_day)],
+            'purchase_quarter': [int(purchase_quarter)],
+            'price_per_weight': [float(price_per_weight)]
+        })
         
-        if result["status"] == "success":
-            st.success("Prediction Successful!")
+        # Make prediction
+        prediction = model.predict(input_data)[0]
+        probability = model.predict_proba(input_data)[0]
+        
+        # Display results
+        st.subheader("Prediction Results")
+        
+        # Create a container for the results
+        result_container = st.container()
+        
+        with result_container:
+            # Display prediction
+            if prediction == 1:
+                st.success("✅ On-time Delivery")
+            else:
+                st.error("⚠️ Delayed Delivery")
             
-            # Display prediction in a nice format
-            col1, col2, col3 = st.columns(3)
-            with col2:
-                st.metric(
-                    label="Predicted Sales Performance",
-                    value=f"{result['prediction']:.2f}",
-                    delta=None
-                )
+            # Display probability
+            st.metric(
+                "Probability of On-time Delivery",
+                f"{probability[1]*100:.2f}%"
+            )
             
-            # Add explanation
-            st.markdown("""
-            ### Prediction Explanation
-            The model considers various factors including:
-            - Product characteristics (price, dimensions, weight)
-            - Delivery timing and performance
-            - Time-based features (seasonality, day of week)
-            """)
-            
-        else:
-            st.error(f"Error: {result.get('error', 'Unknown error occurred')}")
-            
+            # Display feature importance
+            if hasattr(model, 'feature_importances_'):
+                st.subheader("Feature Importance")
+                feature_importance = pd.DataFrame({
+                    'Feature': input_data.columns,
+                    'Importance': model.feature_importances_
+                }).sort_values('Importance', ascending=False)
+                
+                st.bar_chart(feature_importance.set_index('Feature'))
+    
     except Exception as e:
-        st.error(f"Error connecting to the API: {str(e)}")
+        st.error(f"Error making prediction: {str(e)}")
 
-# Add sidebar with information
-with st.sidebar:
-    st.header("About")
-    st.markdown("""
-    This application uses machine learning to predict sales performance
-    based on historical data from Olist's marketplace.
-    
-    ### Features Considered:
-    - Product details (price, dimensions, weight)
-    - Delivery information
-    - Time-based features
-    - Derived metrics (price per volume, delivery delay)
-    """)
-    
-    st.header("Model Information")
-    st.markdown("""
-    The model is trained on historical Olist data and uses:
-    - Random Forest algorithm
-    - Cross-validation for robust performance
-    - Feature engineering for better predictions
-    """) 
+# Add some helpful information
+st.sidebar.markdown("""
+### About the Model
+This model predicts delivery delays using the following features:
+- Freight Value
+- Purchase Date (Year, Month, Day, Quarter)
+- Price per Weight
+
+The model was trained on historical delivery data and uses a Random Forest algorithm.
+""")
+
+# Add footer
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center'>
+    <p>Built with ❤️ using Streamlit</p>
+    <p>Model Accuracy: 82.66%</p>
+</div>
+""", unsafe_allow_html=True) 

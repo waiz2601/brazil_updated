@@ -1,104 +1,109 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+import joblib
 import pandas as pd
 import numpy as np
-import joblib
 from datetime import datetime
-import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
 # Load the trained model
-model = joblib.load('best_model.joblib')
+try:
+    model = joblib.load('random_forest_model.joblib')
+except Exception as e:
+    print(f"Error loading model: {str(e)}")
+    model = None
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def home():
     return jsonify({
         'status': 'success',
-        'message': 'Olist Sales Prediction API is running'
+        'message': 'Delivery Delay Prediction API',
+        'endpoints': {
+            'predict': '/predict (POST)',
+            'health': '/health (GET)'
+        },
+        'example_request': {
+            'freight_value': 10.0,
+            'purchase_year': 2023,
+            'purchase_month': 7,
+            'purchase_day': 15,
+            'purchase_quarter': 3,
+            'price_per_weight': 10.0
+        }
     })
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    if model is None:
+        return jsonify({
+            'error': 'Model not loaded. Please check the server logs.'
+        }), 500
+
     try:
         # Get data from request
         data = request.get_json()
         
-        # Create DataFrame with input data
-        input_data = pd.DataFrame([data])
+        if not data:
+            return jsonify({
+                'error': 'No data provided. Please send a JSON object with the required fields.'
+            }), 400
+
+        # Validate required fields
+        required_fields = ['freight_value', 'purchase_year', 'purchase_month', 
+                         'purchase_day', 'purchase_quarter', 'price_per_weight']
+        missing_fields = [field for field in required_fields if field not in data]
         
-        # Add time-based features
-        input_data['order_purchase_timestamp'] = pd.to_datetime(input_data['order_purchase_timestamp'])
-        input_data['purchase_year'] = input_data['order_purchase_timestamp'].dt.year
-        input_data['purchase_month'] = input_data['order_purchase_timestamp'].dt.month
-        input_data['purchase_day'] = input_data['order_purchase_timestamp'].dt.day
-        input_data['purchase_weekday'] = input_data['order_purchase_timestamp'].dt.weekday
-        input_data['purchase_hour'] = input_data['order_purchase_timestamp'].dt.hour
-        input_data['purchase_quarter'] = input_data['order_purchase_timestamp'].dt.quarter
-        input_data['is_weekend'] = input_data['purchase_weekday'].isin([5, 6]).astype(int)
-        input_data['is_holiday'] = input_data['purchase_month'].isin([12, 1]).astype(int)
-        input_data['is_peak_hour'] = input_data['purchase_hour'].isin([9, 10, 11, 12, 13, 14, 15, 16, 17]).astype(int)
-        input_data['is_morning'] = input_data['purchase_hour'].isin([6, 7, 8, 9, 10, 11]).astype(int)
-        input_data['is_afternoon'] = input_data['purchase_hour'].isin([12, 13, 14, 15, 16, 17]).astype(int)
-        input_data['is_evening'] = input_data['purchase_hour'].isin([18, 19, 20, 21, 22, 23]).astype(int)
+        if missing_fields:
+            return jsonify({
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }), 400
         
-        # Add product features
-        input_data['product_volume'] = input_data['product_length_cm'] * input_data['product_height_cm'] * input_data['product_width_cm']
-        input_data['product_volume'] = input_data['product_volume'].replace(0, 1)
-        input_data['price_per_volume'] = input_data['price'] / input_data['product_volume']
-        input_data['price_per_weight'] = input_data['price'] / input_data['product_weight_g'].replace(0, 1)
-        input_data['product_density'] = input_data['product_weight_g'] / input_data['product_volume']
-        
-        # Add delivery features
-        input_data['order_delivered_carrier_date'] = pd.to_datetime(input_data['order_delivered_carrier_date'])
-        input_data['order_delivered_customer_date'] = pd.to_datetime(input_data['order_delivered_customer_date'])
-        input_data['processing_time'] = (input_data['order_delivered_carrier_date'] - input_data['order_purchase_timestamp']).dt.days
-        input_data['shipping_time'] = (input_data['order_delivered_customer_date'] - input_data['order_delivered_carrier_date']).dt.days
-        input_data['total_delivery_time'] = (input_data['order_delivered_customer_date'] - input_data['order_purchase_timestamp']).dt.days
-        
-        # Add categorical features with custom bins to handle duplicates
-        price_bins = [0, 50, 100, 200, 500, float('inf')]
-        price_labels = ['Very Low', 'Low', 'Medium', 'High', 'Very High']
-        input_data['price_category'] = pd.cut(input_data['price'], bins=price_bins, labels=price_labels, include_lowest=True)
-        
-        volume_bins = [0, 1000, 5000, 10000, float('inf')]
-        volume_labels = ['Small', 'Medium', 'Large', 'Very Large']
-        input_data['product_size_category'] = pd.cut(input_data['product_volume'], bins=volume_bins, labels=volume_labels, include_lowest=True)
-        
-        # Encode categorical features
-        input_data['price_category'] = input_data['price_category'].astype('category').cat.codes
-        input_data['product_size_category'] = input_data['product_size_category'].astype('category').cat.codes
-        
-        # Add interaction features
-        input_data['volume_weight_interaction'] = input_data['product_volume'] * input_data['product_weight_g']
-        input_data['price_volume_interaction'] = input_data['price'] * input_data['product_volume']
-        
-        # Select features for prediction
-        feature_columns = [
-            'price', 'freight_value', 'product_weight_g', 'product_volume',
-            'purchase_year', 'purchase_month', 'purchase_day', 'purchase_weekday',
-            'purchase_hour', 'purchase_quarter', 'is_weekend', 'is_holiday',
-            'is_peak_hour', 'is_morning', 'is_afternoon', 'is_evening',
-            'price_per_volume', 'price_per_weight', 'product_density',
-            'processing_time', 'shipping_time', 'total_delivery_time',
-            'volume_weight_interaction', 'price_volume_interaction',
-            'price_category', 'product_size_category'
-        ]
-        
-        # Make prediction
-        prediction = model.predict(input_data[feature_columns])
-        
-        return jsonify({
-            'prediction': float(prediction[0]),
-            'status': 'success'
+        # Create a DataFrame with the input data
+        input_data = pd.DataFrame({
+            'freight_value': [float(data['freight_value'])],
+            'purchase_year': [int(data['purchase_year'])],
+            'purchase_month': [int(data['purchase_month'])],
+            'purchase_day': [int(data['purchase_day'])],
+            'purchase_quarter': [int(data['purchase_quarter'])],
+            'price_per_weight': [float(data['price_per_weight'])]
         })
         
+        # Make prediction
+        prediction = model.predict(input_data)[0]
+        probability = model.predict_proba(input_data)[0]
+        
+        return jsonify({
+            'prediction': int(prediction),
+            'probability': float(probability[1]),
+            'message': 'On-time delivery' if prediction == 1 else 'Delayed delivery'
+        })
+    
     except Exception as e:
         return jsonify({
-            'error': str(e),
-            'status': 'error'
+            'error': str(e)
         }), 400
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model is not None,
+        'timestamp': datetime.now().isoformat()
+    })
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested URL was not found on the server.'
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': 'An unexpected error has occurred.'
+    }), 500
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    app.run(debug=True) 

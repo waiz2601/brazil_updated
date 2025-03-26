@@ -1,0 +1,174 @@
+{
+    "timestamp": "2025-03-26 23:31:18",
+    "data_overview": {
+        "total_samples": 117329,
+        "training_set_size": 93863,
+        "test_set_size": 23466,
+        "original_class_distribution": {
+            "on_time_delivery": 92.44,
+            "delayed_delivery": 7.56
+        },
+        "balanced_class_distribution": {
+            "on_time_delivery": 66.67,
+            "delayed_delivery": 33.33
+        }
+    },
+    "experimentation": {
+        "missing_value_handling": {
+            "numerical_features": {
+                "method": "median imputation",
+                "features": {
+                    "product_weight_g": {
+                        "missing": 20,
+                        "method": "median"
+                    },
+                    "product_length_cm": {
+                        "missing": 20,
+                        "method": "median"
+                    },
+                    "product_height_cm": {
+                        "missing": 20,
+                        "method": "median"
+                    },
+                    "product_width_cm": {
+                        "missing": 20,
+                        "method": "median"
+                    }
+                },
+                "rationale": "Median used instead of mean due to skewed distributions"
+            },
+            "categorical_features": {
+                "method": "mode imputation",
+                "features": {
+                    "product_category_name": {
+                        "missing": 1695,
+                        "method": "mode"
+                    }
+                }
+            },
+            "temporal_features": {
+                "method": "forward/backward fill",
+                "features": {
+                    "order_approved_at": {
+                        "missing": 15,
+                        "method": "forward fill"
+                    },
+                    "order_delivered_carrier_date": {
+                        "missing": 1235,
+                        "method": "backward fill"
+                    },
+                    "order_delivered_customer_date": {
+                        "missing": 2471,
+                        "method": "backward fill"
+                    }
+                },
+                "rationale": "Maintains temporal sequence in time series data"
+            }
+        },
+        "outlier_handling": {
+            "method": "IQR method",
+            "features_treated": {
+                "price": {
+                    "skewness": 7.65,
+                    "treatment": "log transformation"
+                },
+                "freight_value": {
+                    "skewness": 5.55,
+                    "treatment": "log transformation"
+                },
+                "product_weight_g": {
+                    "skewness": 3.58,
+                    "treatment": "log transformation"
+                },
+                "product_height_cm": {
+                    "skewness": 2.24,
+                    "treatment": "log transformation"
+                }
+            },
+            "rationale": "Log transformation applied to highly skewed features to normalize distribution"
+        },
+        "feature_engineering": {
+            "temporal_features": [
+                {
+                    "name": "purchase_hour",
+                    "importance": 0.142
+                },
+                {
+                    "name": "purchase_weekday",
+                    "importance": 0.063
+                }
+            ],
+            "product_features": [
+                {
+                    "name": "product_volume",
+                    "importance": 0.112
+                },
+                {
+                    "name": "price_per_weight",
+                    "importance": 0.084
+                }
+            ],
+            "rationale": "Created features based on domain knowledge and data analysis"
+        },
+        "class_imbalance": {
+            "method": "RandomUnderSampler",
+            "original_ratio": "92.44:7.56",
+            "balanced_ratio": "66.67:33.33",
+            "rationale": "Undersampling chosen to handle severe class imbalance"
+        }
+    },
+    "model_selection": {
+        "tested_models": {
+            "random_forest": {
+                "hyperparameters": {
+                    "n_estimators": 100,
+                    "random_state": 42
+                },
+                "performance": {
+                    "accuracy": 0.8433,
+                    "precision": 0.9722
+                }
+            },
+            "xgboost": {
+                "hyperparameters": {
+                    "scale_pos_weight": 2,
+                    "random_state": 42
+                },
+                "performance": {
+                    "accuracy": 0.8389
+                }
+            },
+            "gradient_boosting": {
+                "hyperparameters": {
+                    "n_estimators": 100,
+                    "random_state": 42
+                },
+                "performance": {
+                    "accuracy": 0.8276
+                }
+            }
+        },
+        "validation_strategy": {
+            "method": "5-fold cross-validation",
+            "metrics": [
+                "accuracy",
+                "precision",
+                "recall",
+                "f1-score"
+            ]
+        }
+    },
+    "feature_selection": {
+        "method": "Random Forest Feature Importance",
+        "selected_features": {
+            "freight_value": 0.245,
+            "price": 0.198,
+            "product_weight_g": 0.156,
+            "purchase_hour": 0.142,
+            "product_volume": 0.112,
+            "price_per_weight": 0.084,
+            "purchase_weekday": 0.063
+        },
+        "rationale": "Selected based on importance scores > 0.05"
+    }
+}

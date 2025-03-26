@@ -1,103 +1,124 @@
-# Brazilian E-Commerce Sales Prediction
+# Delivery Delay Prediction System
 
-This project implements a machine learning model to predict product prices in the Olist marketplace using historical sales data. The application includes a Flask API backend and a Streamlit frontend for easy interaction.
+A machine learning system that predicts whether a delivery will be on time or delayed based on various features. The system includes both a Flask API and a Streamlit web interface.
 
 ## Features
 
-- Sales prediction using multiple ML models (XGBoost, Random Forest, Gradient Boosting, AdaBoost)
-- Feature engineering for time-based, product, and delivery metrics
-- Interactive web interface using Streamlit
-- RESTful API using Flask
-- Comprehensive model evaluation and visualization
+- **Machine Learning Model**: Random Forest classifier with 82.66% accuracy
+- **Flask API**: RESTful API for delivery delay predictions
+- **Streamlit Interface**: User-friendly web interface for predictions
+- **Feature Engineering**: Handles missing values, outliers, and creates derived features
+- **Model Evaluation**: Comprehensive metrics including accuracy, precision, recall, and F1-score
 
-## Prerequisites
+## Project Structure
 
-- Python 3.8 or higher
-- pip (Python package installer)
+```
+delivery_delay/
+├── app.py                 # Flask API
+├── streamlit_app.py       # Streamlit web interface
+├── delivery_delay.py      # Main model training script
+├── requirements.txt       # Project dependencies
+├── random_forest_model.joblib  # Trained model
+└── README.md             # Project documentation
+```
 
 ## Installation
 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/waiz2601/Brazillian_E-Commerce_2.git
-cd Brazillian_E-Commerce_2
+git clone https://github.com/yourusername/delivery-delay-prediction.git
+cd delivery-delay-prediction
 ```
 
-2. Install required packages:
+2. Create a virtual environment (recommended):
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Project Structure
-
-```
-Brazillian_E-Commerce_2/
-├── app.py                 # Flask API server
-├── streamlit_app.py       # Streamlit frontend
-├── sales_prediction.py    # Model training script
-├── requirements.txt       # Project dependencies
-├── best_model.joblib     # Trained model file
-└── preprocessed_data2.csv # Preprocessed dataset
-```
-
 ## Usage
 
-1. Train the model:
-
-```bash
-python sales_prediction.py
-```
-
-This will:
-
-- Load and preprocess the data
-- Train multiple ML models
-- Generate performance metrics and visualizations
-- Save the best model as 'best_model.joblib'
-
-2. Start the Flask API server:
+### Running the Flask API
 
 ```bash
 python app.py
 ```
 
-The API will be available at http://localhost:5000
+The API will be available at `http://localhost:5000`
 
-3. Launch the Streamlit interface:
+Available endpoints:
+
+- `GET /`: API documentation
+- `GET /health`: Health check
+- `POST /predict`: Make predictions
+
+Example API request:
+
+```python
+import requests
+
+data = {
+    'freight_value': 10.0,
+    'purchase_year': 2023,
+    'purchase_month': 7,
+    'purchase_day': 15,
+    'purchase_quarter': 3,
+    'price_per_weight': 10.0
+}
+
+response = requests.post('http://localhost:5000/predict', json=data)
+print(response.json())
+```
+
+### Running the Streamlit App
 
 ```bash
 streamlit run streamlit_app.py
 ```
 
-The web interface will be available at http://localhost:8501
+The app will be available at `http://localhost:8501`
 
-## API Endpoints
+## Model Features
 
-- `GET /`: Health check endpoint
-- `POST /predict`: Sales prediction endpoint
-  ```json
-  {
-    "price": float,
-    "freight_value": float,
-    "product_weight_g": float,
-    "product_length_cm": float,
-    "product_height_cm": float,
-    "product_width_cm": float,
-    "order_purchase_timestamp": "YYYY-MM-DD HH:MM:SS",
-    "order_delivered_carrier_date": "YYYY-MM-DD HH:MM:SS",
-    "order_delivered_customer_date": "YYYY-MM-DD HH:MM:SS"
-  }
-  ```
+The model uses the following features:
+
+- Freight Value
+- Purchase Date (Year, Month, Day, Quarter)
+- Price per Weight
 
 ## Model Performance
 
-The best model (XGBoost) achieves:
+- Accuracy: 82.66%
+- Average Precision: 95.21%
+- Cross-validation Accuracy: 74.78% (± 1.02%)
 
-- R² Score: 0.9624 (96.24% accuracy)
-- RMSE: 44.11
-- MAE: 14.21
+## Data Preprocessing
+
+The system includes comprehensive data preprocessing:
+
+1. Missing Value Handling
+
+   - Numerical features: Median/Mean imputation based on skewness
+   - Categorical features: Mode imputation
+   - Time-based features: Forward/Backward fill
+
+2. Outlier Handling
+
+   - IQR method for skewed distributions
+   - Z-score method for normal distributions
+
+3. Feature Engineering
+   - Time-based features
+   - Product-related features
+   - Derived metrics
 
 ## Contributing
 
@@ -110,3 +131,8 @@ The best model (XGBoost) achieves:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Dataset: Brazilian E-commerce Public Dataset
+- Libraries: scikit-learn, pandas, numpy, Flask, Streamlit
